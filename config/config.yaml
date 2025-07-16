@@ -1,0 +1,94 @@
+# ECG Arrhythmia Monitoring Configuration
+
+# Data Configuration
+data:
+  mit_bih_path: "data/mit-bih-arrhythmia-database"
+  raw_data_path: "data/raw"
+  processed_data_path: "data/processed"
+  sampling_rate: 360  # MIT-BIH sampling rate
+  window_size: 1080   # 3 seconds at 360 Hz
+  overlap: 0.5        # 50% overlap
+  
+# Preprocessing
+preprocessing:
+  filter_type: "bandpass"
+  low_freq: 0.5
+  high_freq: 40
+  notch_freq: 60      # Remove power line interference
+  normalize: true
+  remove_baseline: true
+  
+# Model Configuration
+model:
+  architecture: "CNN_LSTM"  # Options: CNN, LSTM, CNN_LSTM, ResNet1D, Transformer
+  input_shape: [1080, 1]
+  num_classes: 5
+  hidden_units: 128
+  lstm_units: 64
+  dropout_rate: 0.3
+  
+# Training Configuration
+training:
+  batch_size: 32
+  epochs: 100
+  learning_rate: 0.001
+  patience: 10
+  validation_split: 0.2
+  test_split: 0.2
+  class_weights: "balanced"
+  
+# Arrhythmia Classes (AAMI Standard)
+classes:
+  N: 0  # Normal beats
+  S: 1  # Supraventricular ectopic beats
+  V: 2  # Ventricular ectopic beats
+  F: 3  # Fusion beats
+  Q: 4  # Unclassifiable beats
+  
+# MIT-BIH Annotation Mapping
+annotation_mapping:
+  # Normal
+  N: "N"
+  L: "N"
+  R: "N"
+  e: "N"
+  j: "N"
+  
+  # Supraventricular
+  A: "S"
+  a: "S"
+  J: "S"
+  S: "S"
+  
+  # Ventricular
+  V: "V"
+  E: "V"
+  
+  # Fusion
+  F: "F"
+  
+  # Unclassifiable
+  "/": "Q"
+  f: "Q"
+  Q: "Q"
+  
+# Real-time Monitoring
+realtime:
+  buffer_size: 5000
+  update_interval: 1.0  # seconds
+  alert_threshold: 0.7
+  dashboard_port: 8050
+  websocket_port: 8765
+  
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/ecg_monitor.log"
+  
+# Paths
+paths:
+  model_save_path: "models/trained_models"
+  checkpoint_path: "models/checkpoints"
+  logs_path: "logs"
+  static_path: "static"

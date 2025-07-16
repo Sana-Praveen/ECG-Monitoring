@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ECG Arrhythmia Monitor</title>
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+
+  <style>
+    canvas { height: 280px !important; }
+    .alert-banner {
+      display: none;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border: 2px solid #dc3545;
+      color: #dc3545;
+      background-color: #ffe5e5;
+      font-weight: bold;
+      text-align: center;
+    }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+    <h2 class="mb-4 text-center">ECG Arrhythmia Real-Time Monitor</h2>
+
+    <div id="alertBanner" class="alert-banner">⚠️ Arrhythmia Detected!</div>
+
+    <!-- Manual Stats Form -->
+    <form id="manualStatsForm" class="row g-2 mb-4">
+      <div class="col-md-4">
+        <input type="text" class="form-control" name="heart_rate" placeholder="Heart Rate (bpm)" required />
+      </div>
+      <div class="col-md-4">
+        <input type="text" class="form-control" name="blood_pressure" placeholder="Blood Pressure" />
+      </div>
+      <div class="col-md-4 d-flex">
+        <input type="text" class="form-control me-2" name="comment" placeholder="Comment" />
+        <button class="btn btn-primary" type="submit">Submit Stats</button>
+      </div>
+    </form>
+
+    <!-- ECG & HR Graphs -->
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <canvas id="ecgChart"></canvas>
+      </div>
+      <div class="col-md-6">
+        <canvas id="hrChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Stats + Manual Log -->
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">Current Statistics</div>
+          <ul class="list-group list-group-flush" id="statsList">
+            <li class="list-group-item">Total Predictions: <span id="stat-total">0</span></li>
+            <li class="list-group-item">Normal Beats: <span id="stat-normal">0</span></li>
+            <li class="list-group-item">Abnormal Beats: <span id="stat-abnormal">0</span></li>
+            <li class="list-group-item">Alerts: <span id="stat-alerts">0</span></li>
+            <li class="list-group-item">Runtime: <span id="stat-runtime">0s</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">Manual Stats Log</div>
+          <ul class="list-group list-group-flush" id="manualStatsLog">
+            <li class="list-group-item text-muted">No manual data yet</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    const socket = io();
+    socket.on('connect', () => console.log("✅ Socket connected"));
+
+    // ECG Chart
+    const ecgCtx = document.getElementById('ecgChart').getContext('2d');
+    const ecgChart = new Chart(ecgCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'ECG Signal',
+          data: [],
+          borderColor: '#007bff',
+          borderWidth: 1.5,
+          fill: false,
+          tension: 0.1
+        }]
+      },
+      options: {
+        animation: false,
+        scales: {
+          x: { display: false },
+          y: { title: { display: true, text: 'Amplitude' } }
+        }
+      }
+    });
+
+    // Heart Rate Chart
+    const hrCtx = document.getElementById('hrChart').getContext('2d');
+    const hrChart = new Chart(hrCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Heart Rate (bpm)',
+          data: [],
+          borderColor: '#dc3545',
+          borderWidth: 2,
+          fill: false,
+          tension: 0.3
+        }]
+      },
+      options: {
+        animation: false,
+        scales: {
+          x: { display: false },
+          y: {
+            title: { display: true, text: 'BPM' },
+            suggestedMin: 50,
+            suggestedMax: 180
+          }
+        }
+      }
+    });
+
+    // ECG update: signal + predictions + stats
+    socket.on('ecg_update', ({ ecg_data, predictions, stats }) => {
+      const labels = ecg_data.map((_, i) => i);
+      const values = ecg_data.map(d => d.value);
+      ecgChart.data.labels = labels;
+      ecgChart.data.datasets[0].data = values;
+      ecgChart.update();
+      console.log("Received ECG data", ecg_data);
+
+
+      // Update stats
+      document.getElementById('stat-total').textContent = stats.total_predictions;
+      document.getElementById('stat-normal').textContent = stats.normal_count;
+      document.getElementById('stat-abnormal').textContent = stats.abnormal_count;
+      document.getElementById('stat-alerts').textContent = stats.alerts_triggered;
+      document.getElementById('stat-runtime').textContent = `${Math.floor(stats.runtime)}s`;
+    });
+
+    // Stats only update
+    socket.on('stat_update', stats => {
+      document.getElementById('stat-total').textContent = stats.total_predictions;
+      document.getElementById('stat-normal').textContent = stats.normal_count;
+      document.getElementById('stat-abnormal').textContent = stats.abnormal_count;
+      document.getElementById('stat-alerts').textContent = stats.alerts_triggered;
+      document.getElementById('stat-runtime').textContent = `${Math.floor(stats.runtime)}s`;
+    });
+
+    // Alert
+    socket.on('alert', data => {
+      const banner = document.getElementById('alertBanner');
+      banner.textContent = `⚠️ ${data.class_name} Detected! (${(data.confidence * 100).toFixed(1)}%)`;
+      banner.style.display = 'block';
+      setTimeout(() => { banner.style.display = 'none'; }, 5000);
+    });
+
+    // Manual stats update
+    socket.on('manual_stats_update', data => {
+      const log = document.getElementById('manualStatsLog');
+      if (log.children[0].classList.contains('text-muted')) log.innerHTML = '';
+      const item = document.createElement('li');
+      item.className = 'list-group-item';
+      item.innerHTML = `<strong>${data.timestamp}</strong> - HR: ${data.heart_rate}, BP: ${data.blood_pressure || 'N/A'}, Note: ${data.comment || 'None'}`;
+      log.prepend(item);
+
+      // Update HR Chart
+      hrChart.data.labels.push(data.timestamp);
+      hrChart.data.datasets[0].data.push(parseInt(data.heart_rate));
+      if (hrChart.data.labels.length > 10) {
+        hrChart.data.labels.shift();
+        hrChart.data.datasets[0].data.shift();
+      }
+      hrChart.update();
+    });
+
+    // Manual stats form submit
+    document.getElementById('manualStatsForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const body = {};
+      for (const [key, value] of formData.entries()) body[key] = value;
+      const res = await fetch('/api/manual_stats', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      });
+      if (res.ok) e.target.reset();
+    });
+  </script>
+</body>
+</html>

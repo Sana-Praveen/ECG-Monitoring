@@ -1,0 +1,4 @@
+Model,Accuracy,Precision,Recall,F1-Score
+CNN,0.0,0.0,0.0,0.0
+CNN_LSTM,0.0,0.0,0.0,0.0
+ResNet1D,0.0,0.0,0.0,0.0
